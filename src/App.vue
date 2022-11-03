@@ -1,7 +1,7 @@
 <template>
-  <div class="container mx-auto flex flex-col items-center bg-gray-700 p-4">
+  <div class="container mx-auto flex flex-col items-center bg-gray-500 p-4">
     <div class="container">
-      <!-- form -->
+      <!-- 1. Блок добавления монет -->
       <section>
         <div class="flex">
           <div class="max-w-xs">
@@ -15,7 +15,7 @@
                 type="text"
                 name="wallet"
                 id="wallet"
-                class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
+                class="block pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE"
               />
             </div>
@@ -66,12 +66,38 @@
           Добавить
         </button>
       </section>
-      <!-- list -->
+      <!-- 2. Блок вывода всех монет -->
       <template v-if="tickers.length">
-        <hr class="w-full border-t border-gray-600 my-4" />
+        <!-- 2.1 Фильтрация -->
+        <hr class="w-full border-t border-gray-600 my-2" />
+        <div>
+          Фильтр:
+          <input
+            v-model="filter"
+            class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
+          />
+          <button
+            type="button"
+            v-if="page > 1"
+            @click="page = page - 1"
+            class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Назад
+          </button>
+          <button
+            type="button"
+            v-if="hasNextPage"
+            @click="page = page + 1"
+            class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Вперед
+          </button>
+        </div>
+        <hr class="w-full border-t border-gray-600 my-2" />
+        <!-- 2.2 Вывод списка -->
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="t of tickers"
+            v-for="t of filteredTickers()"
             :key="t.name"
             @click="select(t)"
             :class="{
@@ -111,7 +137,7 @@
         </dl>
         <hr class="w-full border-t border-gray-600 my-4" />
       </template>
-      <!-- graph -->
+      <!-- 3. Блок вывода графика -->
       <section v-if="sel" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ sel.name }}
@@ -162,33 +188,80 @@ export default {
         { name: "A", price: 1 },
         { name: "B", price: 2 },
         { name: "C", price: 3 },
+        { name: "D", price: 4 },
+        { name: "BTC", price: "-" },
+        { name: "ETH", price: "-" },
+        { name: "DXF", price: "-" },
+        { name: "YAP", price: 8 },
+        { name: "CBFT", price: 9 },
+        { name: "TRDS", price: 10 },
+        { name: "EONC", price: 11 },
+        { name: "LIGHT", price: 12 },
+        { name: "F", price: 13 },
       ],
       sel: null,
       graph: [],
+      page: 1,
+      filter: "",
+      hasNextPage: true,
     };
   },
+  created() {
+    const windowData = Object.fromEntries(
+      new URL(window.location).searchParams.entries()
+    );
+    if (windowData.filter) {
+      this.filter = windowData.filter;
+    }
+    if (windowData.page) {
+      this.page = windowData.page;
+    }
+    const tickersData = localStorage.getItem("cryptoList");
+    if (tickersData) {
+      this.tickers = JSON.parse(tickersData);
+      this.tickers.forEach((t) => {
+        this.subscibeToUpdates(t.name);
+      });
+    }
+  },
   methods: {
+    filteredTickers() {
+      const start = 6 * this.page - 6;
+      const end = 6 * this.page - 0;
+      const filteredTickers = this.tickers.filter((item) =>
+        item.name.includes(this.filter)
+      );
+      this.hasNextPage = filteredTickers.length > end;
+      const filteredTickers2 = filteredTickers.slice(start, end);
+      console.log("filteredTickers: hasNextPage", this.hasNextPage);
+      console.log("filteredTickers: ", filteredTickers);
+      return filteredTickers2;
+    },
+    subscibeToUpdates(tickerName) {
+      setInterval(async () => {
+        const response = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD`
+        );
+        const data = await response.json();
+        this.tickers.find((t) => t.name === tickerName).price =
+          data.USD > 10 ? data?.USD.toFixed(0) : 0; //data?.USD.toPrecision(2);
+        if (this.sel?.name === tickerName) this.graph.push(data.USD);
+        console.log("subscibeToUpdates: graph", this.graph);
+      }, 10000);
+    },
     add() {
       const currentTicker = { name: this.ticker, price: "-" };
       this.tickers.push(currentTicker);
-
-      setInterval(async () => {
-        const response = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD`
-        );
-        const data = await response.json();
-        this.tickers.find((t) => t.name === currentTicker.name).price =
-          data.USD > 10 ? data.USD.toFixed(0) : data.USD.toPrecision(2);
-        if (this.sel?.name === currentTicker.name) this.graph.push(data.USD);
-        console.log("this.graph:", this.graph);
-      }, 5000);
-
+      localStorage.setItem("cryptoList", JSON.stringify(this.tickers));
+      this.subscibeToUpdates(currentTicker.name);
       this.ticker = "";
-      console.log("~add:", this.ticker);
+      this.filter = "";
+      console.log("add: this.ticker", this.ticker);
     },
     select(ticker) {
       this.sel = ticker;
       this.graph = [];
+      console.log("select: this.sel", this.sel);
     },
     handleDelete(t) {
       console.log("~delete:", t);
@@ -197,11 +270,28 @@ export default {
     normalizeGraph() {
       const maxVal = Math.max(...this.graph);
       const minVal = Math.min(...this.graph);
-      const a = this.graph.map(
+      const ar = this.graph.map(
         (item) => 5 + ((item - minVal) * 95) / (maxVal - minVal)
       );
-      console.log("a", a);
-      return a;
+      console.log("normalizeGraph: ar ", ar);
+      return ar;
+    },
+  },
+  watch: {
+    filter() {
+      this.page = 1;
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    },
+    page() {
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
     },
   },
 };
