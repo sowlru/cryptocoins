@@ -110,7 +110,8 @@
                 {{ t.name }}
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ t.price }}
+                {{ formatPrice(t.price) }}
+                <!-- {{ t.price }} -->
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -179,8 +180,8 @@
 </template>
 
 <script>
+import { subscribeToTicker, unsubscribeFromTicker } from "./api";
 export default {
-  name: "App",
   data() {
     return {
       // input data
@@ -188,19 +189,14 @@ export default {
       filter: "",
 
       tickers: [
-        { name: "A", price: 1 },
-        { name: "B", price: 2 },
-        { name: "C", price: 3 },
-        { name: "D", price: 4 },
         { name: "BTC", price: "-" },
         { name: "ETH", price: "-" },
         { name: "DXF", price: "-" },
-        { name: "YAP", price: 8 },
-        { name: "CBFT", price: 9 },
-        { name: "TRDS", price: 10 },
-        { name: "EONC", price: 11 },
-        { name: "LIGHT", price: 12 },
-        { name: "F", price: 13 },
+        { name: "YAP", price: "-" },
+        { name: "CBFT", price: "-" },
+        { name: "TRDS", price: "-" },
+        { name: "EONC", price: "-" },
+        { name: "LIGHT", price: "-" },
       ],
       graph: [],
 
@@ -221,11 +217,18 @@ export default {
     const tickersData = localStorage.getItem("cryptoList");
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
+      console.log("1.created: tickers", this.tickers);
       this.tickers.forEach((t) => {
-        this.subscibeToUpdates(t.name);
+        subscribeToTicker(t.name, (newPrice) => {
+          console.log("2.created: subscribeToTicker: t.name", t.name, newPrice);
+          return this.updateTicker(t.name, newPrice);
+        });
       });
     }
+    setInterval(this.updateTickers, 5000);
   },
+
+  // },
   computed: {
     startIndex() {
       return 6 * this.page - 6;
@@ -240,6 +243,7 @@ export default {
       return this.tickers.filter((item) => item.name.includes(this.filter));
     },
     paginatedTickers() {
+      console.log("5.~paginatedTickers:filteredTickers", this.filteredTickers);
       return this.filteredTickers.slice(this.startIndex, this.endIndex);
     },
     normalizedGraph() {
@@ -262,26 +266,32 @@ export default {
     },
   },
   methods: {
-    subscibeToUpdates(tickerName) {
-      setInterval(async () => {
-        const response = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD`
-        );
-        const data = await response.json();
-        this.tickers.find((t) => t.name === tickerName).price =
-          data.USD > 10 ? data?.USD.toFixed(0) : 0; //data?.USD.toPrecision(2);
-        if (this.selectedTicker?.name === tickerName) this.graph.push(data.USD);
-        console.log("subscibeToUpdates: graph", this.graph);
-      }, 10000);
+    updateTicker(tickerName, price) {
+      this.tickers
+        .filter((t) => t.name === tickerName)
+        .forEach((t) => {
+          if (t === this.selectedTicker) {
+            this.graph.push(price);
+          }
+          t.price = price;
+        });
+      console.log("3.~updateTicker:tickers", this.tickers);
+    },
+    formatPrice(price) {
+      if (price === "-") return price;
+      return price > 1 ? price.toFixed(2) : price.toPrecision(2);
     },
     add() {
       const currentTicker = { name: this.ticker, price: "-" };
 
       this.tickers = [...this.tickers, currentTicker];
       this.filter = "";
+      subscribeToTicker(currentTicker.name, (newPrice) =>
+        this.updateTicker(currentTicker.name, newPrice)
+      );
 
-      this.subscibeToUpdates(currentTicker.name);
-      console.log("add: this.ticker", this.ticker);
+      // this.updateTickers(currentTicker.name);
+      // console.log("add: this.ticker", this.ticker);
     },
     select(ticker) {
       this.selectedTicker = ticker;
@@ -293,6 +303,7 @@ export default {
       if (this.selectedTicker === ticketToRemove) {
         this.selectedTicker = null;
       }
+      unsubscribeFromTicker(ticketToRemove.name);
     },
   },
   watch: {
